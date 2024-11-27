@@ -84,7 +84,7 @@ USER www-data
 COPY --chown=www-data:www-data . /var/www/html
 
 # Copy .env
-RUN echo "${APP_ENV}" > $APP_BASE_DIR/.env
+RUN echo "${APP_ENV}" > /var/www/html/.env
 
 # Install Laravel dependencies
 RUN composer install --no-dev --optimize-autoloader --no-scripts
