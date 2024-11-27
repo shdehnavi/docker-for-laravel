@@ -1,0 +1,105 @@
+# Use the official PHP 8.3 FPM Alpine image
+FROM php:8.3-fpm-alpine
+
+# Docker arguments
+ARG APP_ENV
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Install system dependencies
+RUN apk add --no-cache \
+    bash \
+    git \
+    curl \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
+    libzip-dev \
+    icu-dev \
+    oniguruma-dev \
+    freetype-dev \
+    zlib-dev \
+    gmp-dev \
+    tzdata \
+    nginx \
+    supervisor \
+    procps \
+    nodejs \
+    npm \
+    sqlite-dev \
+    postgresql-dev \
+    mysql-client \
+    openssl \
+    libxml2-dev \
+    libxslt-dev \
+    libffi-dev \
+    shadow \
+    nano \
+    build-base \
+    autoconf \
+    automake \
+    m4
+
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp
+
+RUN docker-php-ext-install \
+    bcmath \
+    gd \
+    intl \
+    mbstring \
+    pcntl \
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
+    pdo_sqlite \
+    zip \
+    gmp \
+    exif \
+    opcache \
+    sockets \
+    xml \
+    xsl
+
+RUN pecl install redis \
+    && docker-php-ext-enable redis
+
+# Set Asia/Tehran timezone
+ENV TZ=Asia/Tehran
+RUN cp /usr/share/zoneinfo/Asia/Tehran /etc/localtime && echo "Asia/Tehran" > /etc/timezone
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Copy custom configs
+COPY ./deployment/nginx/vhost.conf /etc/nginx/http.d/vhost.conf
+COPY ./deployment/php/custom-php.ini /usr/local/etc/php/conf.d/custom-php.ini
+COPY ./deployment/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY ./deployment/supervisor/ /etc/supervisor/conf.d/
+
+# Switch to non-root user
+USER www-data
+
+# Copy application code
+COPY --chown=www-data:www-data . /var/www/html
+
+# Copy .env
+RUN echo "${APP_ENV}" > $APP_BASE_DIR/.env
+
+# Install Laravel dependencies
+RUN composer install --no-dev --optimize-autoloader --no-scripts
+RUN npm ci
+RUN npm run build
+
+# Expose Nginx ports
+EXPOSE 80
+
+# Switch back to root for entrypoint script
+USER root
+
+# Copy entrypoint script
+COPY ./deployment/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Start Supervisord
+CMD ["/usr/local/bin/entrypoint.sh"]
